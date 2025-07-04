@@ -352,8 +352,15 @@ class Game {
             
             // Only execute swipe if we're not in drag mode (drag mode is handled by canvas events)
             if (!this.isDragging && this.touchStartPos) {
-                console.log('Executing document swipe movement');
-                this.executeSwipe();
+                // Check if this was actually a swipe (not just a tap)
+                const deltaX = this.fingerPos.x - this.touchStartPos.x;
+                const deltaY = this.fingerPos.y - this.touchStartPos.y;
+                const minSwipeDistance = 30;
+                
+                if (Math.abs(deltaX) >= minSwipeDistance || Math.abs(deltaY) >= minSwipeDistance) {
+                    console.log('Executing document swipe movement');
+                    this.executeSwipe();
+                }
             }
             
             // Reset touch state
@@ -382,8 +389,15 @@ class Game {
             
             // Only execute swipe if we're not in drag mode
             if (!this.isDragging && this.touchStartPos) {
-                console.log('Executing document mouse swipe movement');
-                this.executeSwipe();
+                // Check if this was actually a swipe (not just a click)
+                const deltaX = this.fingerPos.x - this.touchStartPos.x;
+                const deltaY = this.fingerPos.y - this.touchStartPos.y;
+                const minSwipeDistance = 30;
+                
+                if (Math.abs(deltaX) >= minSwipeDistance || Math.abs(deltaY) >= minSwipeDistance) {
+                    console.log('Executing document mouse swipe movement');
+                    this.executeSwipe();
+                }
             }
             
             // Reset touch state
@@ -726,26 +740,17 @@ class Game {
             this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
             this.ctx.lineWidth = 3;
             this.ctx.setLineDash([3, 3]);
-            this.ctx.beginPath();
             
-            // Draw straight line from start to end through tile centers
-            const startPoint = this.touchPath[0];
-            const endPoint = this.touchPath[this.touchPath.length - 1];
+            // Draw path as horizontal and vertical segments only
+            const pathSegments = this.createPathSegments();
             
-            // Convert to tile center coordinates
-            const startTileX = Math.floor((startPoint.x - 20) / this.tileSize);
-            const startTileY = Math.floor((startPoint.y - 20) / this.tileSize);
-            const endTileX = Math.floor((endPoint.x - 20) / this.tileSize);
-            const endTileY = Math.floor((endPoint.y - 20) / this.tileSize);
+            for (const segment of pathSegments) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(segment.startX, segment.startY);
+                this.ctx.lineTo(segment.endX, segment.endY);
+                this.ctx.stroke();
+            }
             
-            const startCenterX = startTileX * this.tileSize + 20 + this.tileSize / 2;
-            const startCenterY = startTileY * this.tileSize + 20 + this.tileSize / 2;
-            const endCenterX = endTileX * this.tileSize + 20 + this.tileSize / 2;
-            const endCenterY = endTileY * this.tileSize + 20 + this.tileSize / 2;
-            
-            this.ctx.moveTo(startCenterX, startCenterY);
-            this.ctx.lineTo(endCenterX, endCenterY);
-            this.ctx.stroke();
             this.ctx.setLineDash([]);
         }
     }
@@ -950,7 +955,6 @@ class Game {
     createStraightTilePath() {
         if (this.touchPath.length === 0) return [];
         
-        const pathTiles = [];
         const startPoint = this.touchPath[0];
         const endPoint = this.touchPath[this.touchPath.length - 1];
         
@@ -960,50 +964,41 @@ class Game {
         const endTileX = Math.floor((endPoint.x - 20) / this.tileSize);
         const endTileY = Math.floor((endPoint.y - 20) / this.tileSize);
         
-        // Create straight path using Bresenham's line algorithm
-        const tiles = this.getLineTiles(startTileX, startTileY, endTileX, endTileY);
+        // Create path with only horizontal and vertical movements
+        const pathTiles = [];
+        
+        // First move horizontally
+        if (startTileX !== endTileX) {
+            const stepX = startTileX < endTileX ? 1 : -1;
+            for (let x = startTileX; x !== endTileX; x += stepX) {
+                pathTiles.push({ x, y: startTileY });
+            }
+        }
+        
+        // Then move vertically
+        if (startTileY !== endTileY) {
+            const stepY = startTileY < endTileY ? 1 : -1;
+            for (let y = startTileY; y !== endTileY; y += stepY) {
+                pathTiles.push({ x: endTileX, y });
+            }
+        }
+        
+        // Add the final destination
+        pathTiles.push({ x: endTileX, y: endTileY });
         
         // Filter to only include valid, paintable tiles
-        for (const tile of tiles) {
+        const validTiles = [];
+        for (const tile of pathTiles) {
             if (tile.x >= 0 && tile.x < this.level.width && 
                 tile.y >= 0 && tile.y < this.level.height) {
                 const tileType = this.getTileAt(tile.x, tile.y, this.cube.layer);
                 if (tileType === 1 || tileType === 3 || tileType === 4) {
-                    pathTiles.push(tile);
+                    validTiles.push(tile);
                 }
             }
         }
         
-        return pathTiles;
-    }
-    
-    getLineTiles(x0, y0, x1, y1) {
-        const tiles = [];
-        const dx = Math.abs(x1 - x0);
-        const dy = Math.abs(y1 - y0);
-        const sx = x0 < x1 ? 1 : -1;
-        const sy = y0 < y1 ? 1 : -1;
-        let err = dx - dy;
-        
-        let x = x0, y = y0;
-        
-        while (true) {
-            tiles.push({ x, y });
-            
-            if (x === x1 && y === y1) break;
-            
-            const e2 = 2 * err;
-            if (e2 > -dy) {
-                err -= dy;
-                x += sx;
-            }
-            if (e2 < dx) {
-                err += dx;
-                y += sy;
-            }
-        }
-        
-        return tiles;
+        return validTiles;
     }
     
     executePathMovement(pathTiles) {
@@ -1052,6 +1047,50 @@ class Game {
         setTimeout(() => {
             this.fingerPos = null;
         }, 500);
+    }
+    
+    createPathSegments() {
+        if (this.touchPath.length === 0) return [];
+        
+        const startPoint = this.touchPath[0];
+        const endPoint = this.touchPath[this.touchPath.length - 1];
+        
+        // Convert to tile coordinates
+        const startTileX = Math.floor((startPoint.x - 20) / this.tileSize);
+        const startTileY = Math.floor((startPoint.y - 20) / this.tileSize);
+        const endTileX = Math.floor((endPoint.x - 20) / this.tileSize);
+        const endTileY = Math.floor((endPoint.y - 20) / this.tileSize);
+        
+        // Convert to tile center coordinates
+        const startCenterX = startTileX * this.tileSize + 20 + this.tileSize / 2;
+        const startCenterY = startTileY * this.tileSize + 20 + this.tileSize / 2;
+        const endCenterX = endTileX * this.tileSize + 20 + this.tileSize / 2;
+        const endCenterY = endTileY * this.tileSize + 20 + this.tileSize / 2;
+        
+        const segments = [];
+        
+        // Create horizontal and vertical segments
+        if (startCenterX !== endCenterX) {
+            // Horizontal segment
+            segments.push({
+                startX: startCenterX,
+                startY: startCenterY,
+                endX: endCenterX,
+                endY: startCenterY
+            });
+        }
+        
+        if (startCenterY !== endCenterY) {
+            // Vertical segment
+            segments.push({
+                startX: endCenterX,
+                startY: startCenterY,
+                endX: endCenterX,
+                endY: endCenterY
+            });
+        }
+        
+        return segments;
     }
 }
 
