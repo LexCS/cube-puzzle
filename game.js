@@ -153,7 +153,7 @@ class Game {
             const x = touch.clientX - rect.left;
             const y = touch.clientY - rect.top;
             
-            // Always update finger position when dragging
+            // Always update finger position
             this.fingerPos = { x, y };
             
             if (this.isDragging) {
@@ -177,7 +177,7 @@ class Game {
                 console.log('Executing touch path movement');
                 // Execute path movement
                 this.executeTouchPath();
-            } else if (this.touchStartPos) {
+            } else if (this.touchStartPos && this.fingerPos) {
                 console.log('Executing touch swipe movement');
                 // Simple swipe movement
                 this.executeSwipe();
@@ -229,7 +229,7 @@ class Game {
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
             
-            // Always update finger position when dragging
+            // Always update finger position
             this.fingerPos = { x, y };
             
             if (this.isDragging) {
@@ -252,9 +252,9 @@ class Game {
                 console.log('Executing mouse path movement');
                 // Execute path movement
                 this.executeTouchPath();
-            } else if (this.touchStartPos) {
-                console.log('Executing mouse click movement');
-                // Simple click movement
+            } else if (this.touchStartPos && this.fingerPos) {
+                console.log('Executing mouse swipe movement');
+                // Simple swipe movement
                 this.executeSwipe();
             }
             
@@ -267,76 +267,11 @@ class Game {
             this.showCubeHighlight = false;
         });
         
-        // Simple touch fallback - just detect taps and convert to keyboard input
-        this.canvas.addEventListener('click', (e) => {
-            console.log('Click detected');
-            if (this.gameState !== 'playing' || this.cube.animating) return;
-            
-            const rect = this.canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            // Convert click to movement based on position relative to cube
-            const cubeCenterX = this.cube.x * this.tileSize + 20 + this.tileSize / 2;
-            const cubeCenterY = this.cube.y * this.tileSize + 20 + this.tileSize / 2;
-            
-            const deltaX = x - cubeCenterX;
-            const deltaY = y - cubeCenterY;
-            
-            console.log('Click delta:', deltaX, deltaY);
-            
-            // Determine direction based on click position
-            let dx = 0, dy = 0;
-            if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                dx = deltaX > 0 ? 1 : -1;
-            } else {
-                dy = deltaY > 0 ? 1 : -1;
-            }
-            
-            if (dx !== 0 || dy !== 0) {
-                console.log('Moving cube:', dx, dy);
-                this.moveCube(dx, dy);
-            }
-        });
-        
-        // Prevent all default touch behaviors on the canvas
-        this.canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
-        this.canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-        this.canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
-        this.canvas.addEventListener('touchcancel', (e) => e.preventDefault(), { passive: false });
-        
-        // Add a simple tap detection system that should work on all devices
-        let lastTapTime = 0;
-        let lastTapPos = null;
-        
-        this.canvas.addEventListener('touchend', (e) => {
-            const now = Date.now();
-            const touch = e.changedTouches[0];
-            const rect = this.canvas.getBoundingClientRect();
-            const x = touch.clientX - rect.left;
-            const y = touch.clientY - rect.top;
-            
-            // Show visual feedback that touch was detected
-            this.showTouchFeedback(x, y);
-            
-            // Simple tap detection
-            if (now - lastTapTime < 300 && lastTapPos) {
-                const deltaX = x - lastTapPos.x;
-                const deltaY = y - lastTapPos.y;
-                
-                if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
-                    // This is a tap, move cube in a direction
-                    console.log('Tap detected, moving cube');
-                    this.moveCube(1, 0); // Move right as default
-                }
-            }
-            
-            lastTapTime = now;
-            lastTapPos = { x, y };
-        }, { passive: false });
-        
-        // Document-level swipe detection for Control Scheme A
+        // Document-level swipe detection for Control Scheme A (only when not on canvas)
         document.addEventListener('touchstart', (e) => {
+            // Only handle if not on canvas
+            if (e.target === this.canvas) return;
+            
             console.log('Document touch start detected');
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
@@ -346,6 +281,9 @@ class Game {
         }, { passive: false });
         
         document.addEventListener('touchmove', (e) => {
+            // Only handle if not on canvas
+            if (e.target === this.canvas) return;
+            
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
             const touch = e.touches[0];
@@ -353,10 +291,13 @@ class Game {
         }, { passive: false });
         
         document.addEventListener('touchend', (e) => {
+            // Only handle if not on canvas
+            if (e.target === this.canvas) return;
+            
             console.log('Document touch end detected');
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
-            // Only execute swipe if we're not in drag mode (drag mode is handled by canvas events)
+            // Only execute swipe if we're not in drag mode
             if (!this.isDragging && this.touchStartPos) {
                 // Check if this was actually a swipe (not just a tap)
                 const deltaX = this.fingerPos.x - this.touchStartPos.x;
@@ -374,8 +315,11 @@ class Game {
             this.fingerPos = null;
         }, { passive: false });
         
-        // Document-level mouse swipe detection for desktop
+        // Document-level mouse swipe detection for desktop (only when not on canvas)
         document.addEventListener('mousedown', (e) => {
+            // Only handle if not on canvas
+            if (e.target === this.canvas) return;
+            
             console.log('Document mouse down detected');
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
@@ -384,12 +328,18 @@ class Game {
         });
         
         document.addEventListener('mousemove', (e) => {
+            // Only handle if not on canvas
+            if (e.target === this.canvas) return;
+            
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
             this.fingerPos = { x: e.clientX, y: e.clientY };
         });
         
         document.addEventListener('mouseup', (e) => {
+            // Only handle if not on canvas
+            if (e.target === this.canvas) return;
+            
             console.log('Document mouse up detected');
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
@@ -729,8 +679,8 @@ class Game {
             this.ctx.setLineDash([]);
         }
         
-        // Draw finger position indicator - ALWAYS show when dragging
-        if (this.isDragging && this.fingerPos) {
+        // Draw finger position indicator - show during any touch/mouse interaction
+        if (this.fingerPos && (this.touchStartPos || this.isDragging)) {
             console.log('Drawing finger position at:', this.fingerPos);
             this.ctx.fillStyle = 'rgba(255, 255, 0, 0.7)';
             this.ctx.beginPath();
@@ -744,7 +694,8 @@ class Game {
         
         // Draw the path being created
         if (this.touchPath.length > 1) {
-            // Draw the raw touch path first
+            // HIDE the raw touch path (green line) - commented out
+            /*
             this.ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
             this.ctx.lineWidth = 2;
             this.ctx.setLineDash([3, 3]);
@@ -760,6 +711,7 @@ class Game {
             }
             this.ctx.stroke();
             this.ctx.setLineDash([]);
+            */
             
             // Now draw the processed tile path
             const pathTiles = this.convertTouchPathToTiles(this.touchPath);
@@ -1042,17 +994,12 @@ class Game {
                         // Reset path to this point
                         const resetIndex = tiles.findIndex(t => t.x === tile.x && t.y === tile.y);
                         if (resetIndex !== -1) {
+                            // Remove all tiles after the reset point
                             tiles.splice(resetIndex + 1);
-                            // Remove visited tiles after reset point
-                            const keysToRemove = [];
-                            for (const key of visited) {
-                                const [x, y] = key.split(',').map(Number);
-                                const index = tiles.findIndex(t => t.x === x && t.y === y);
-                                if (index > resetIndex) {
-                                    keysToRemove.push(key);
-                                }
-                            }
-                            keysToRemove.forEach(key => visited.delete(key));
+                            
+                            // Rebuild the visited set to match the current tiles
+                            visited.clear();
+                            tiles.forEach(t => visited.add(`${t.x},${t.y}`));
                         }
                     } else {
                         // Add new tile to path
@@ -1093,55 +1040,65 @@ class Game {
         
         console.log('Executing path movement with', pathTiles.length, 'tiles:', pathTiles);
         
-        // Move cube step by step along the path, painting each tile
-        let currentIndex = 0;
-        
-        const moveNext = () => {
-            if (currentIndex >= pathTiles.length) {
-                // Path complete
-                console.log('Path movement complete');
-                this.checkGameState();
-                return;
-            }
+        // Paint all tiles in the path
+        for (let i = 0; i < pathTiles.length; i++) {
+            const tile = pathTiles[i];
+            const key = `${tile.x},${tile.y},${this.cube.layer}`;
             
-            const targetTile = pathTiles[currentIndex];
-            console.log(`Moving to tile ${currentIndex + 1}/${pathTiles.length}:`, targetTile);
-            
-            // Check if we can move to this tile
-            if (this.canMoveTo(targetTile.x, targetTile.y)) {
-                // Move cube to this position
-                this.cube.x = targetTile.x;
-                this.cube.y = targetTile.y;
-                
-                console.log('Cube moved to:', this.cube.x, this.cube.y);
-                
-                // Handle tile interaction (paint the tile)
-                this.handleTileInteraction();
-                
-                currentIndex++;
-                
-                // Continue to next tile after a short delay for visual effect
-                setTimeout(moveNext, 200);
-            } else {
-                // Can't move to this tile, stop here
-                console.log('Cannot move to tile:', targetTile);
-                this.checkGameState();
+            // Paint the tile if it's paintable
+            const tileType = this.getTileAt(tile.x, tile.y, this.cube.layer);
+            if (tileType === 1 || tileType === 3 || tileType === 4) {
+                this.paintedTiles.add(key);
+                console.log('Painted tile:', tile.x, tile.y);
             }
-        };
+        }
         
-        // Start the path movement
-        console.log('Starting path movement...');
-        moveNext();
+        // Find the final valid destination tile (ignore painted tiles for path movement)
+        let finalTile = null;
+        for (let i = pathTiles.length - 1; i >= 0; i--) {
+            const tile = pathTiles[i];
+            if (this.canMoveToForPath(tile.x, tile.y)) {
+                finalTile = tile;
+                break;
+            }
+        }
+        
+        if (!finalTile) {
+            console.log('No valid destination found');
+            this.checkGameState();
+            return;
+        }
+        
+        console.log('Moving to final destination:', finalTile);
+        
+        // Move cube directly to final position
+        this.cube.x = finalTile.x;
+        this.cube.y = finalTile.y;
+        
+        // Handle tile interaction for the final tile (color changers, switches, etc.)
+        this.handleTileInteraction();
+        
+        // Check game state
+        this.checkGameState();
     }
     
-    showTouchFeedback(x, y) {
-        // Show a temporary visual indicator that touch was detected
-        this.fingerPos = { x, y };
+    canMoveToForPath(x, y, layer = null) {
+        if (layer === null) layer = this.cube.layer;
         
-        // Clear the indicator after a short delay
-        setTimeout(() => {
-            this.fingerPos = null;
-        }, 500);
+        const tile = this.getTileAt(x, y, layer);
+        if (tile === 0 || tile === 2) return false; // empty or pillar
+        
+        // For path movement, we ignore painted tiles since we paint them first
+        // const key = `${x},${y},${layer}`;
+        // if (this.paintedTiles.has(key)) return false;
+        
+        // Only check color restriction for paintable floor tiles
+        if (tile === 1) {
+            const targetColor = this.getTileTargetColor(x, y, layer);
+            if (this.cube.color !== targetColor) return false;
+        }
+        
+        return true;
     }
 }
 
