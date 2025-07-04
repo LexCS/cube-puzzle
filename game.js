@@ -114,13 +114,17 @@ class Game {
         
         // Touch controls for mobile
         this.canvas.addEventListener('touchstart', (e) => {
+            console.log('Touch start detected');
             e.preventDefault();
+            e.stopPropagation();
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
             const touch = e.touches[0];
             const rect = this.canvas.getBoundingClientRect();
             const x = touch.clientX - rect.left;
             const y = touch.clientY - rect.top;
+            
+            console.log('Touch position:', x, y);
             
             this.touchStartPos = { x, y };
             this.touchPath = [];
@@ -132,16 +136,21 @@ class Game {
             const cubePixelY = this.cube.y * this.tileSize + 20 + this.tileSize / 4;
             const cubeSize = this.tileSize / 2;
             
+            console.log('Cube bounds:', cubePixelX, cubePixelY, cubeSize);
+            
             if (x >= cubePixelX && x <= cubePixelX + cubeSize && 
                 y >= cubePixelY && y <= cubePixelY + cubeSize) {
+                console.log('Touch started on cube - entering drag mode');
                 this.isDragging = true;
                 this.dragStartTile = { x: this.cube.x, y: this.cube.y };
                 this.showCubeHighlight = true;
             }
-        });
+        }, { passive: false });
         
         this.canvas.addEventListener('touchmove', (e) => {
+            console.log('Touch move detected');
             e.preventDefault();
+            e.stopPropagation();
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
             const touch = e.touches[0];
@@ -152,19 +161,24 @@ class Game {
             this.fingerPos = { x, y };
             
             if (this.isDragging) {
+                console.log('Adding to path:', x, y);
                 // Add current position to path
                 this.touchPath.push({ x, y });
             }
-        });
+        }, { passive: false });
         
         this.canvas.addEventListener('touchend', (e) => {
+            console.log('Touch end detected');
             e.preventDefault();
+            e.stopPropagation();
             if (this.gameState !== 'playing' || this.cube.animating) return;
             
             if (this.isDragging && this.touchPath.length > 0) {
+                console.log('Executing path movement');
                 // Execute path movement
                 this.executeTouchPath();
             } else if (this.touchStartPos) {
+                console.log('Executing swipe movement');
                 // Simple swipe movement
                 this.executeSwipe();
             }
@@ -176,6 +190,38 @@ class Game {
             this.dragStartTile = null;
             this.fingerPos = null;
             this.showCubeHighlight = false;
+        }, { passive: false });
+        
+        // Simple touch fallback - just detect taps and convert to keyboard input
+        this.canvas.addEventListener('click', (e) => {
+            console.log('Click detected');
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Convert click to movement based on position relative to cube
+            const cubeCenterX = this.cube.x * this.tileSize + 20 + this.tileSize / 2;
+            const cubeCenterY = this.cube.y * this.tileSize + 20 + this.tileSize / 2;
+            
+            const deltaX = x - cubeCenterX;
+            const deltaY = y - cubeCenterY;
+            
+            console.log('Click delta:', deltaX, deltaY);
+            
+            // Determine direction based on click position
+            let dx = 0, dy = 0;
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                dx = deltaX > 0 ? 1 : -1;
+            } else {
+                dy = deltaY > 0 ? 1 : -1;
+            }
+            
+            if (dx !== 0 || dy !== 0) {
+                console.log('Moving cube:', dx, dy);
+                this.moveCube(dx, dy);
+            }
         });
     }
     
