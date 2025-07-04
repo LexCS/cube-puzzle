@@ -1040,46 +1040,37 @@ class Game {
         
         console.log('Executing path movement with', pathTiles.length, 'tiles:', pathTiles);
         
-        // Paint all tiles in the path
-        for (let i = 0; i < pathTiles.length; i++) {
-            const tile = pathTiles[i];
-            const key = `${tile.x},${tile.y},${this.cube.layer}`;
-            
-            // Paint the tile if it's paintable
-            const tileType = this.getTileAt(tile.x, tile.y, this.cube.layer);
-            if (tileType === 1 || tileType === 3 || tileType === 4) {
-                this.paintedTiles.set(key, this.cube.color);
-                console.log('Painted tile:', tile.x, tile.y);
-            }
-        }
-        
-        // Find the final valid destination tile (ignore painted tiles for path movement)
-        let finalTile = null;
-        for (let i = pathTiles.length - 1; i >= 0; i--) {
-            const tile = pathTiles[i];
-            if (this.canMoveToForPath(tile.x, tile.y)) {
-                finalTile = tile;
-                break;
-            }
-        }
-        
-        if (!finalTile) {
-            console.log('No valid destination found');
+        // Start the step-by-step animation
+        this.animatePathMovement(pathTiles, 0);
+    }
+    
+    animatePathMovement(pathTiles, currentIndex) {
+        if (currentIndex >= pathTiles.length) {
+            // Animation complete, handle final tile interaction
+            this.handleTileInteraction();
             this.checkGameState();
             return;
         }
         
-        console.log('Moving to final destination:', finalTile);
+        const tile = pathTiles[currentIndex];
+        console.log(`Moving to tile ${currentIndex + 1}/${pathTiles.length}:`, tile);
         
-        // Move cube directly to final position
-        this.cube.x = finalTile.x;
-        this.cube.y = finalTile.y;
+        // Move cube to this tile
+        this.cube.x = tile.x;
+        this.cube.y = tile.y;
         
-        // Handle tile interaction for the final tile (color changers, switches, etc.)
-        this.handleTileInteraction();
+        // Paint the tile if it's paintable
+        const key = `${tile.x},${tile.y},${this.cube.layer}`;
+        const tileType = this.getTileAt(tile.x, tile.y, this.cube.layer);
+        if (tileType === 1 || tileType === 3 || tileType === 4) {
+            this.paintedTiles.set(key, this.cube.color);
+            console.log('Painted tile:', tile.x, tile.y);
+        }
         
-        // Check game state
-        this.checkGameState();
+        // Schedule next step with delay
+        setTimeout(() => {
+            this.animatePathMovement(pathTiles, currentIndex + 1);
+        }, 200); // 200ms delay between steps
     }
     
     canMoveToForPath(x, y, layer = null) {
