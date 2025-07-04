@@ -7,6 +7,13 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    touch-action: none;
 }
 
 #game-container {
@@ -33,6 +40,13 @@ body {
     border: 2px solid #333;
     border-radius: 5px;
     background-color: #fff;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
 }
 
 #popup {

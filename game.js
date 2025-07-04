@@ -25,6 +25,14 @@ class Game {
         this.gameState = 'playing'; // 'playing', 'won', 'lost'
         this.animationDuration = 300; // milliseconds
         
+        // Touch control variables
+        this.touchStartPos = null;
+        this.touchPath = [];
+        this.isDragging = false;
+        this.dragStartTile = null;
+        this.fingerPos = null;
+        this.showCubeHighlight = false;
+        
         // Available colors for tiles
         this.availableColors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#fd79a8', '#00b894', '#e17055', '#a29bfe'];
         
@@ -102,6 +110,72 @@ class Game {
                 // Game completed
                 this.showPopup('Congratulations! You completed all levels!', false);
             }
+        });
+        
+        // Touch controls for mobile
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            const touch = e.touches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            this.touchStartPos = { x, y };
+            this.touchPath = [];
+            this.isDragging = false;
+            this.fingerPos = { x, y };
+            
+            // Check if touch started on the cube
+            const cubePixelX = this.cube.x * this.tileSize + 20 + this.tileSize / 4;
+            const cubePixelY = this.cube.y * this.tileSize + 20 + this.tileSize / 4;
+            const cubeSize = this.tileSize / 2;
+            
+            if (x >= cubePixelX && x <= cubePixelX + cubeSize && 
+                y >= cubePixelY && y <= cubePixelY + cubeSize) {
+                this.isDragging = true;
+                this.dragStartTile = { x: this.cube.x, y: this.cube.y };
+                this.showCubeHighlight = true;
+            }
+        });
+        
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            const touch = e.touches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            this.fingerPos = { x, y };
+            
+            if (this.isDragging) {
+                // Add current position to path
+                this.touchPath.push({ x, y });
+            }
+        });
+        
+        this.canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            if (this.isDragging && this.touchPath.length > 0) {
+                // Execute path movement
+                this.executeTouchPath();
+            } else if (this.touchStartPos) {
+                // Simple swipe movement
+                this.executeSwipe();
+            }
+            
+            // Reset touch state
+            this.touchStartPos = null;
+            this.touchPath = [];
+            this.isDragging = false;
+            this.dragStartTile = null;
+            this.fingerPos = null;
+            this.showCubeHighlight = false;
         });
     }
     
@@ -404,6 +478,50 @@ class Game {
         
         // Draw cube
         this.drawCube();
+        
+        // Draw touch feedback elements
+        this.drawTouchFeedback();
+    }
+    
+    drawTouchFeedback() {
+        // Draw cube highlight when dragging
+        if (this.showCubeHighlight) {
+            const pixelX = this.cube.x * this.tileSize + 20;
+            const pixelY = this.cube.y * this.tileSize + 20;
+            
+            this.ctx.strokeStyle = '#00ff00';
+            this.ctx.lineWidth = 3;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.strokeRect(pixelX - 2, pixelY - 2, this.tileSize + 4, this.tileSize + 4);
+            this.ctx.setLineDash([]);
+        }
+        
+        // Draw finger position indicator
+        if (this.fingerPos) {
+            this.ctx.fillStyle = 'rgba(255, 255, 0, 0.7)';
+            this.ctx.beginPath();
+            this.ctx.arc(this.fingerPos.x, this.fingerPos.y, 15, 0, 2 * Math.PI);
+            this.ctx.fill();
+            
+            this.ctx.strokeStyle = '#ff6600';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+        }
+        
+        // Draw touch path line
+        if (this.touchPath.length > 1) {
+            this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+            this.ctx.lineWidth = 3;
+            this.ctx.setLineDash([3, 3]);
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.touchPath[0].x, this.touchPath[0].y);
+            
+            for (let i = 1; i < this.touchPath.length; i++) {
+                this.ctx.lineTo(this.touchPath[i].x, this.touchPath[i].y);
+            }
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
     }
     
     drawTile(x, y, tile, isPainted, layer) {
@@ -568,6 +686,67 @@ class Game {
     gameLoop() {
         this.render();
         requestAnimationFrame(() => this.gameLoop());
+    }
+    
+    executeSwipe() {
+        if (!this.touchStartPos || !this.fingerPos) return;
+        
+        const deltaX = this.fingerPos.x - this.touchStartPos.x;
+        const deltaY = this.fingerPos.y - this.touchStartPos.y;
+        const minSwipeDistance = 30; // Minimum distance for a swipe
+        
+        if (Math.abs(deltaX) < minSwipeDistance && Math.abs(deltaY) < minSwipeDistance) return;
+        
+        // Determine swipe direction
+        let dx = 0, dy = 0;
+        if (Math.abs(deltaX) > Math.abs(deltaY)) {
+            dx = deltaX > 0 ? 1 : -1;
+        } else {
+            dy = deltaY > 0 ? 1 : -1;
+        }
+        
+        this.moveCube(dx, dy);
+    }
+    
+    executeTouchPath() {
+        if (this.touchPath.length === 0) return;
+        
+        // Convert path to tile coordinates
+        const pathTiles = [];
+        for (const point of this.touchPath) {
+            const tileX = Math.floor((point.x - 20) / this.tileSize);
+            const tileY = Math.floor((point.y - 20) / this.tileSize);
+            
+            if (tileX >= 0 && tileX < this.level.width && 
+                tileY >= 0 && tileY < this.level.height) {
+                pathTiles.push({ x: tileX, y: tileY });
+            }
+        }
+        
+        // Execute movement along the path
+        this.executePathMovement(pathTiles);
+    }
+    
+    executePathMovement(pathTiles) {
+        if (pathTiles.length === 0) return;
+        
+        // Find the target tile (last valid tile in path)
+        let targetTile = null;
+        for (let i = pathTiles.length - 1; i >= 0; i--) {
+            const tile = pathTiles[i];
+            if (this.canMoveTo(tile.x, tile.y)) {
+                targetTile = tile;
+                break;
+            }
+        }
+        
+        if (!targetTile) return;
+        
+        // Move cube to target position
+        this.cube.x = targetTile.x;
+        this.cube.y = targetTile.y;
+        this.handleTileInteraction();
+        this.checkGameState();
     }
 }
 
