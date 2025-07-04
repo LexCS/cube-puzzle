@@ -741,16 +741,27 @@ class Game {
             this.ctx.lineWidth = 3;
             this.ctx.setLineDash([3, 3]);
             
-            // Draw path as horizontal and vertical segments only
-            const pathSegments = this.createPathSegments();
+            // Draw the actual path the finger/mouse moved through
+            this.ctx.beginPath();
             
-            for (const segment of pathSegments) {
-                this.ctx.beginPath();
-                this.ctx.moveTo(segment.startX, segment.startY);
-                this.ctx.lineTo(segment.endX, segment.endY);
-                this.ctx.stroke();
+            // Convert each point to tile center coordinates
+            for (let i = 0; i < this.touchPath.length; i++) {
+                const point = this.touchPath[i];
+                const tileX = Math.floor((point.x - 20) / this.tileSize);
+                const tileY = Math.floor((point.y - 20) / this.tileSize);
+                
+                // Convert to tile center coordinates
+                const centerX = tileX * this.tileSize + 20 + this.tileSize / 2;
+                const centerY = tileY * this.tileSize + 20 + this.tileSize / 2;
+                
+                if (i === 0) {
+                    this.ctx.moveTo(centerX, centerY);
+                } else {
+                    this.ctx.lineTo(centerX, centerY);
+                }
             }
             
+            this.ctx.stroke();
             this.ctx.setLineDash([]);
         }
     }
@@ -945,64 +956,43 @@ class Game {
     executeTouchPath() {
         if (this.touchPath.length === 0) return;
         
-        // Convert path to tile coordinates and create straight path through tile centers
-        const pathTiles = this.createStraightTilePath();
+        console.log('Touch path points:', this.touchPath.length);
+        
+        // Create path from the actual tiles the finger/mouse passed over
+        const pathTiles = [];
+        const seenTiles = new Set(); // To avoid duplicates
+        
+        for (const point of this.touchPath) {
+            const tileX = Math.floor((point.x - 20) / this.tileSize);
+            const tileY = Math.floor((point.y - 20) / this.tileSize);
+            
+            // Check if tile is valid and not already added
+            if (tileX >= 0 && tileX < this.level.width && 
+                tileY >= 0 && tileY < this.level.height) {
+                
+                const tileKey = `${tileX},${tileY}`;
+                if (!seenTiles.has(tileKey)) {
+                    seenTiles.add(tileKey);
+                    
+                    const tileType = this.getTileAt(tileX, tileY, this.cube.layer);
+                    if (tileType === 1 || tileType === 3 || tileType === 4) {
+                        pathTiles.push({ x: tileX, y: tileY });
+                        console.log('Added tile to path:', { x: tileX, y: tileY, type: tileType });
+                    }
+                }
+            }
+        }
+        
+        console.log('Final path tiles:', pathTiles);
         
         // Execute movement along the path, painting each tile
         this.executePathMovement(pathTiles);
     }
     
-    createStraightTilePath() {
-        if (this.touchPath.length === 0) return [];
-        
-        const startPoint = this.touchPath[0];
-        const endPoint = this.touchPath[this.touchPath.length - 1];
-        
-        // Convert to tile coordinates
-        const startTileX = Math.floor((startPoint.x - 20) / this.tileSize);
-        const startTileY = Math.floor((startPoint.y - 20) / this.tileSize);
-        const endTileX = Math.floor((endPoint.x - 20) / this.tileSize);
-        const endTileY = Math.floor((endPoint.y - 20) / this.tileSize);
-        
-        // Create path with only horizontal and vertical movements
-        const pathTiles = [];
-        
-        // First move horizontally
-        if (startTileX !== endTileX) {
-            const stepX = startTileX < endTileX ? 1 : -1;
-            for (let x = startTileX; x !== endTileX; x += stepX) {
-                pathTiles.push({ x, y: startTileY });
-            }
-        }
-        
-        // Then move vertically
-        if (startTileY !== endTileY) {
-            const stepY = startTileY < endTileY ? 1 : -1;
-            for (let y = startTileY; y !== endTileY; y += stepY) {
-                pathTiles.push({ x: endTileX, y });
-            }
-        }
-        
-        // Add the final destination
-        pathTiles.push({ x: endTileX, y: endTileY });
-        
-        // Filter to only include valid, paintable tiles
-        const validTiles = [];
-        for (const tile of pathTiles) {
-            if (tile.x >= 0 && tile.x < this.level.width && 
-                tile.y >= 0 && tile.y < this.level.height) {
-                const tileType = this.getTileAt(tile.x, tile.y, this.cube.layer);
-                if (tileType === 1 || tileType === 3 || tileType === 4) {
-                    validTiles.push(tile);
-                }
-            }
-        }
-        
-        return validTiles;
-    }
-    
     executePathMovement(pathTiles) {
         if (pathTiles.length === 0) return;
+        
+        console.log('Path tiles to move through:', pathTiles);
         
         // Move cube step by step along the path, painting each tile
         let currentIndex = 0;
@@ -1010,11 +1000,13 @@ class Game {
         const moveNext = () => {
             if (currentIndex >= pathTiles.length) {
                 // Path complete
+                console.log('Path movement complete');
                 this.checkGameState();
                 return;
             }
             
             const targetTile = pathTiles[currentIndex];
+            console.log(`Moving to tile ${currentIndex + 1}/${pathTiles.length}:`, targetTile);
             
             // Check if we can move to this tile
             if (this.canMoveTo(targetTile.x, targetTile.y)) {
@@ -1031,6 +1023,7 @@ class Game {
                 setTimeout(moveNext, 100);
             } else {
                 // Can't move to this tile, stop here
+                console.log('Cannot move to tile:', targetTile);
                 this.checkGameState();
             }
         };
@@ -1047,50 +1040,6 @@ class Game {
         setTimeout(() => {
             this.fingerPos = null;
         }, 500);
-    }
-    
-    createPathSegments() {
-        if (this.touchPath.length === 0) return [];
-        
-        const startPoint = this.touchPath[0];
-        const endPoint = this.touchPath[this.touchPath.length - 1];
-        
-        // Convert to tile coordinates
-        const startTileX = Math.floor((startPoint.x - 20) / this.tileSize);
-        const startTileY = Math.floor((startPoint.y - 20) / this.tileSize);
-        const endTileX = Math.floor((endPoint.x - 20) / this.tileSize);
-        const endTileY = Math.floor((endPoint.y - 20) / this.tileSize);
-        
-        // Convert to tile center coordinates
-        const startCenterX = startTileX * this.tileSize + 20 + this.tileSize / 2;
-        const startCenterY = startTileY * this.tileSize + 20 + this.tileSize / 2;
-        const endCenterX = endTileX * this.tileSize + 20 + this.tileSize / 2;
-        const endCenterY = endTileY * this.tileSize + 20 + this.tileSize / 2;
-        
-        const segments = [];
-        
-        // Create horizontal and vertical segments
-        if (startCenterX !== endCenterX) {
-            // Horizontal segment
-            segments.push({
-                startX: startCenterX,
-                startY: startCenterY,
-                endX: endCenterX,
-                endY: startCenterY
-            });
-        }
-        
-        if (startCenterY !== endCenterY) {
-            // Vertical segment
-            segments.push({
-                startX: endCenterX,
-                startY: startCenterY,
-                endX: endCenterX,
-                endY: endCenterY
-            });
-        }
-        
-        return segments;
     }
 }
 
