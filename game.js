@@ -725,6 +725,7 @@ class Game {
         
         // Draw finger position indicator
         if (this.fingerPos) {
+            console.log('Drawing finger position at:', this.fingerPos);
             this.ctx.fillStyle = 'rgba(255, 255, 0, 0.7)';
             this.ctx.beginPath();
             this.ctx.arc(this.fingerPos.x, this.fingerPos.y, 15, 0, 2 * Math.PI);
@@ -733,6 +734,8 @@ class Game {
             this.ctx.strokeStyle = '#ff6600';
             this.ctx.lineWidth = 2;
             this.ctx.stroke();
+        } else {
+            console.log('No finger position to draw');
         }
         
         // Draw touch path line
@@ -826,7 +829,7 @@ class Game {
                 this.ctx.fillText('■', centerX, centerY);
                 break;
             case 3:
-                this.ctx.fillText('🎨', centerX, centerY);
+                this.ctx.fillText('��', centerX, centerY);
                 break;
             case 4:
                 // Draw switch with changing icon and background color
@@ -994,42 +997,33 @@ class Game {
         
         console.log('Path tiles to move through:', pathTiles);
         
-        // Move cube step by step along the path, painting each tile
-        let currentIndex = 0;
-        
-        const moveNext = () => {
-            if (currentIndex >= pathTiles.length) {
-                // Path complete
-                console.log('Path movement complete');
-                this.checkGameState();
-                return;
+        // Find the final valid destination tile
+        let finalTile = null;
+        for (let i = pathTiles.length - 1; i >= 0; i--) {
+            const tile = pathTiles[i];
+            if (this.canMoveTo(tile.x, tile.y)) {
+                finalTile = tile;
+                break;
             }
-            
-            const targetTile = pathTiles[currentIndex];
-            console.log(`Moving to tile ${currentIndex + 1}/${pathTiles.length}:`, targetTile);
-            
-            // Check if we can move to this tile
-            if (this.canMoveTo(targetTile.x, targetTile.y)) {
-                // Move cube to this position
-                this.cube.x = targetTile.x;
-                this.cube.y = targetTile.y;
-                
-                // Handle tile interaction (paint the tile)
-                this.handleTileInteraction();
-                
-                currentIndex++;
-                
-                // Continue to next tile after a short delay for visual effect
-                setTimeout(moveNext, 100);
-            } else {
-                // Can't move to this tile, stop here
-                console.log('Cannot move to tile:', targetTile);
-                this.checkGameState();
-            }
-        };
+        }
         
-        // Start the path movement
-        moveNext();
+        if (!finalTile) {
+            console.log('No valid destination found');
+            this.checkGameState();
+            return;
+        }
+        
+        console.log('Moving to final destination:', finalTile);
+        
+        // Move cube directly to final position
+        this.cube.x = finalTile.x;
+        this.cube.y = finalTile.y;
+        
+        // Handle tile interaction (paint the tile)
+        this.handleTileInteraction();
+        
+        // Check game state
+        this.checkGameState();
     }
     
     showTouchFeedback(x, y) {
