@@ -1048,7 +1048,7 @@ class Game {
             // Paint the tile if it's paintable
             const tileType = this.getTileAt(tile.x, tile.y, this.cube.layer);
             if (tileType === 1 || tileType === 3 || tileType === 4) {
-                this.paintedTiles.add(key);
+                this.paintedTiles.set(key, this.cube.color);
                 console.log('Painted tile:', tile.x, tile.y);
             }
         }
