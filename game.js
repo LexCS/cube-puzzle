@@ -328,6 +328,68 @@ class Game {
             lastTapTime = now;
             lastTapPos = { x, y };
         }, { passive: false });
+        
+        // Document-level swipe detection for Control Scheme A
+        document.addEventListener('touchstart', (e) => {
+            console.log('Document touch start detected');
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            const touch = e.touches[0];
+            this.touchStartPos = { x: touch.clientX, y: touch.clientY };
+            this.fingerPos = { x: touch.clientX, y: touch.clientY };
+        }, { passive: false });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            const touch = e.touches[0];
+            this.fingerPos = { x: touch.clientX, y: touch.clientY };
+        }, { passive: false });
+        
+        document.addEventListener('touchend', (e) => {
+            console.log('Document touch end detected');
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            // Only execute swipe if we're not in drag mode (drag mode is handled by canvas events)
+            if (!this.isDragging && this.touchStartPos) {
+                console.log('Executing document swipe movement');
+                this.executeSwipe();
+            }
+            
+            // Reset touch state
+            this.touchStartPos = null;
+            this.fingerPos = null;
+        }, { passive: false });
+        
+        // Document-level mouse swipe detection for desktop
+        document.addEventListener('mousedown', (e) => {
+            console.log('Document mouse down detected');
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            this.touchStartPos = { x: e.clientX, y: e.clientY };
+            this.fingerPos = { x: e.clientX, y: e.clientY };
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            this.fingerPos = { x: e.clientX, y: e.clientY };
+        });
+        
+        document.addEventListener('mouseup', (e) => {
+            console.log('Document mouse up detected');
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            // Only execute swipe if we're not in drag mode
+            if (!this.isDragging && this.touchStartPos) {
+                console.log('Executing document mouse swipe movement');
+                this.executeSwipe();
+            }
+            
+            // Reset touch state
+            this.touchStartPos = null;
+            this.fingerPos = null;
+        });
     }
     
     loadLevel(levelIndex) {
@@ -665,11 +727,24 @@ class Game {
             this.ctx.lineWidth = 3;
             this.ctx.setLineDash([3, 3]);
             this.ctx.beginPath();
-            this.ctx.moveTo(this.touchPath[0].x, this.touchPath[0].y);
             
-            for (let i = 1; i < this.touchPath.length; i++) {
-                this.ctx.lineTo(this.touchPath[i].x, this.touchPath[i].y);
-            }
+            // Draw straight line from start to end through tile centers
+            const startPoint = this.touchPath[0];
+            const endPoint = this.touchPath[this.touchPath.length - 1];
+            
+            // Convert to tile center coordinates
+            const startTileX = Math.floor((startPoint.x - 20) / this.tileSize);
+            const startTileY = Math.floor((startPoint.y - 20) / this.tileSize);
+            const endTileX = Math.floor((endPoint.x - 20) / this.tileSize);
+            const endTileY = Math.floor((endPoint.y - 20) / this.tileSize);
+            
+            const startCenterX = startTileX * this.tileSize + 20 + this.tileSize / 2;
+            const startCenterY = startTileY * this.tileSize + 20 + this.tileSize / 2;
+            const endCenterX = endTileX * this.tileSize + 20 + this.tileSize / 2;
+            const endCenterY = endTileY * this.tileSize + 20 + this.tileSize / 2;
+            
+            this.ctx.moveTo(startCenterX, startCenterY);
+            this.ctx.lineTo(endCenterX, endCenterY);
             this.ctx.stroke();
             this.ctx.setLineDash([]);
         }
@@ -846,6 +921,8 @@ class Game {
         const deltaY = this.fingerPos.y - this.touchStartPos.y;
         const minSwipeDistance = 30; // Minimum distance for a swipe
         
+        console.log('Swipe delta:', deltaX, deltaY);
+        
         if (Math.abs(deltaX) < minSwipeDistance && Math.abs(deltaY) < minSwipeDistance) return;
         
         // Determine swipe direction
@@ -856,48 +933,115 @@ class Game {
             dy = deltaY > 0 ? 1 : -1;
         }
         
+        console.log('Moving cube:', dx, dy);
         this.moveCube(dx, dy);
     }
     
     executeTouchPath() {
         if (this.touchPath.length === 0) return;
         
-        // Convert path to tile coordinates
+        // Convert path to tile coordinates and create straight path through tile centers
+        const pathTiles = this.createStraightTilePath();
+        
+        // Execute movement along the path, painting each tile
+        this.executePathMovement(pathTiles);
+    }
+    
+    createStraightTilePath() {
+        if (this.touchPath.length === 0) return [];
+        
         const pathTiles = [];
-        for (const point of this.touchPath) {
-            const tileX = Math.floor((point.x - 20) / this.tileSize);
-            const tileY = Math.floor((point.y - 20) / this.tileSize);
-            
-            if (tileX >= 0 && tileX < this.level.width && 
-                tileY >= 0 && tileY < this.level.height) {
-                pathTiles.push({ x: tileX, y: tileY });
+        const startPoint = this.touchPath[0];
+        const endPoint = this.touchPath[this.touchPath.length - 1];
+        
+        // Convert to tile coordinates
+        const startTileX = Math.floor((startPoint.x - 20) / this.tileSize);
+        const startTileY = Math.floor((startPoint.y - 20) / this.tileSize);
+        const endTileX = Math.floor((endPoint.x - 20) / this.tileSize);
+        const endTileY = Math.floor((endPoint.y - 20) / this.tileSize);
+        
+        // Create straight path using Bresenham's line algorithm
+        const tiles = this.getLineTiles(startTileX, startTileY, endTileX, endTileY);
+        
+        // Filter to only include valid, paintable tiles
+        for (const tile of tiles) {
+            if (tile.x >= 0 && tile.x < this.level.width && 
+                tile.y >= 0 && tile.y < this.level.height) {
+                const tileType = this.getTileAt(tile.x, tile.y, this.cube.layer);
+                if (tileType === 1 || tileType === 3 || tileType === 4) {
+                    pathTiles.push(tile);
+                }
             }
         }
         
-        // Execute movement along the path
-        this.executePathMovement(pathTiles);
+        return pathTiles;
+    }
+    
+    getLineTiles(x0, y0, x1, y1) {
+        const tiles = [];
+        const dx = Math.abs(x1 - x0);
+        const dy = Math.abs(y1 - y0);
+        const sx = x0 < x1 ? 1 : -1;
+        const sy = y0 < y1 ? 1 : -1;
+        let err = dx - dy;
+        
+        let x = x0, y = y0;
+        
+        while (true) {
+            tiles.push({ x, y });
+            
+            if (x === x1 && y === y1) break;
+            
+            const e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y += sy;
+            }
+        }
+        
+        return tiles;
     }
     
     executePathMovement(pathTiles) {
         if (pathTiles.length === 0) return;
         
-        // Find the target tile (last valid tile in path)
-        let targetTile = null;
-        for (let i = pathTiles.length - 1; i >= 0; i--) {
-            const tile = pathTiles[i];
-            if (this.canMoveTo(tile.x, tile.y)) {
-                targetTile = tile;
-                break;
+        // Move cube step by step along the path, painting each tile
+        let currentIndex = 0;
+        
+        const moveNext = () => {
+            if (currentIndex >= pathTiles.length) {
+                // Path complete
+                this.checkGameState();
+                return;
             }
-        }
+            
+            const targetTile = pathTiles[currentIndex];
+            
+            // Check if we can move to this tile
+            if (this.canMoveTo(targetTile.x, targetTile.y)) {
+                // Move cube to this position
+                this.cube.x = targetTile.x;
+                this.cube.y = targetTile.y;
+                
+                // Handle tile interaction (paint the tile)
+                this.handleTileInteraction();
+                
+                currentIndex++;
+                
+                // Continue to next tile after a short delay for visual effect
+                setTimeout(moveNext, 100);
+            } else {
+                // Can't move to this tile, stop here
+                this.checkGameState();
+            }
+        };
         
-        if (!targetTile) return;
-        
-        // Move cube to target position
-        this.cube.x = targetTile.x;
-        this.cube.y = targetTile.y;
-        this.handleTileInteraction();
-        this.checkGameState();
+        // Start the path movement
+        moveNext();
     }
     
     showTouchFeedback(x, y) {
