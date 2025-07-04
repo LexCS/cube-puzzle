@@ -192,6 +192,75 @@ class Game {
             this.showCubeHighlight = false;
         }, { passive: false });
         
+        // Mouse controls for desktop (including drag)
+        this.canvas.addEventListener('mousedown', (e) => {
+            console.log('Mouse down detected');
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            console.log('Mouse position:', x, y);
+            
+            this.touchStartPos = { x, y };
+            this.touchPath = [];
+            this.isDragging = false;
+            this.fingerPos = { x, y };
+            
+            // Check if mouse started on the cube
+            const cubePixelX = this.cube.x * this.tileSize + 20 + this.tileSize / 4;
+            const cubePixelY = this.cube.y * this.tileSize + 20 + this.tileSize / 4;
+            const cubeSize = this.tileSize / 2;
+            
+            if (x >= cubePixelX && x <= cubePixelX + cubeSize && 
+                y >= cubePixelY && y <= cubePixelY + cubeSize) {
+                console.log('Mouse started on cube - entering drag mode');
+                this.isDragging = true;
+                this.dragStartTile = { x: this.cube.x, y: this.cube.y };
+                this.showCubeHighlight = true;
+            }
+        });
+        
+        this.canvas.addEventListener('mousemove', (e) => {
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            this.fingerPos = { x, y };
+            
+            if (this.isDragging) {
+                console.log('Adding to mouse path:', x, y);
+                // Add current position to path
+                this.touchPath.push({ x, y });
+            }
+        });
+        
+        this.canvas.addEventListener('mouseup', (e) => {
+            console.log('Mouse up detected');
+            if (this.gameState !== 'playing' || this.cube.animating) return;
+            
+            if (this.isDragging && this.touchPath.length > 0) {
+                console.log('Executing mouse path movement');
+                // Execute path movement
+                this.executeTouchPath();
+            } else if (this.touchStartPos) {
+                console.log('Executing mouse click movement');
+                // Simple click movement
+                this.executeSwipe();
+            }
+            
+            // Reset touch state
+            this.touchStartPos = null;
+            this.touchPath = [];
+            this.isDragging = false;
+            this.dragStartTile = null;
+            this.fingerPos = null;
+            this.showCubeHighlight = false;
+        });
+        
         // Simple touch fallback - just detect taps and convert to keyboard input
         this.canvas.addEventListener('click', (e) => {
             console.log('Click detected');
@@ -223,6 +292,42 @@ class Game {
                 this.moveCube(dx, dy);
             }
         });
+        
+        // Prevent all default touch behaviors on the canvas
+        this.canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+        this.canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+        this.canvas.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
+        this.canvas.addEventListener('touchcancel', (e) => e.preventDefault(), { passive: false });
+        
+        // Add a simple tap detection system that should work on all devices
+        let lastTapTime = 0;
+        let lastTapPos = null;
+        
+        this.canvas.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            const touch = e.changedTouches[0];
+            const rect = this.canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            // Show visual feedback that touch was detected
+            this.showTouchFeedback(x, y);
+            
+            // Simple tap detection
+            if (now - lastTapTime < 300 && lastTapPos) {
+                const deltaX = x - lastTapPos.x;
+                const deltaY = y - lastTapPos.y;
+                
+                if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
+                    // This is a tap, move cube in a direction
+                    console.log('Tap detected, moving cube');
+                    this.moveCube(1, 0); // Move right as default
+                }
+            }
+            
+            lastTapTime = now;
+            lastTapPos = { x, y };
+        }, { passive: false });
     }
     
     loadLevel(levelIndex) {
@@ -793,6 +898,16 @@ class Game {
         this.cube.y = targetTile.y;
         this.handleTileInteraction();
         this.checkGameState();
+    }
+    
+    showTouchFeedback(x, y) {
+        // Show a temporary visual indicator that touch was detected
+        this.fingerPos = { x, y };
+        
+        // Clear the indicator after a short delay
+        setTimeout(() => {
+            this.fingerPos = null;
+        }, 500);
     }
 }
 
